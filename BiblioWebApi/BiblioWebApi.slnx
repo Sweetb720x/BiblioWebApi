@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="../BiblioWebApi.Application/BiblioWebApi.Application.csproj" />
+  <Project Path="../BiblioWebApi.Domain/BiblioWebApi.Domain.csproj" />
+  <Project Path="../BiblioWebApi.Infrastructure/BiblioWebApi.Infrastructure.csproj" />
+  <Project Path="BiblioWebApi.csproj" />
+</Solution>

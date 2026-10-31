@@ -1,0 +1,82 @@
+Build results
+
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+Visual Studio
+
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.userprefs
+*.launchSettings.json.user
+
+Visual Studio Code
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+JetBrains Rider
+
+.idea/
+*.sln.iml
+
+User-specific files & Secrets
+
+*.rsuser
+*.suo
+.user
+appsettings.local.json
+appsettings.Secrets.json
+secrets.json
+
+Package caches & NuGet
+
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+
+Entity Framework & Databases
+
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+Test & Coverage results
+
+TestResults/
+[Tt]est[Rr]esult*/
+.trx
+coverage.json
+coverage*.xml
+coverage*.info
+
+Operating System files
+
+.DS_Store
+Thumbs.db
+desktop.ini
