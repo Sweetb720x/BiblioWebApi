@@ -72,7 +72,7 @@ public sealed class BiblioDbContext(DbContextOptions<BiblioDbContext> options) :
         modelBuilder.Entity<Fine>().Property(x => x.SettledAt).HasColumnName("fecha_regularizacion");
 
         modelBuilder.Entity<User>().HasIndex(x => x.Email).IsUnique().HasDatabaseName("UX_Usuarios_Correo");
-        modelBuilder.Entity<Book>().HasIndex(x => x.Isbn).IsUnique().HasDatabaseName("UX_Libros_Isbn");
+        modelBuilder.Entity<Book>().HasIndex(x => x.Isbn).HasDatabaseName("IX_Libros_Isbn");
         modelBuilder.Entity<BookCopy>().HasIndex(x => x.InventoryCode).IsUnique().HasDatabaseName("UX_Ejemplares_Codigo");
         modelBuilder.Entity<Category>().HasIndex(x => x.Name).IsUnique().HasDatabaseName("UX_Categorias_Nombre");
         modelBuilder.Entity<User>().Property(x => x.Role).HasConversion(

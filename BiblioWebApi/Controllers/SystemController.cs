@@ -12,6 +12,10 @@ public sealed class SystemController(ISender sender) : ControllerBase
 {
     [AllowAnonymous, HttpGet("health")] public IActionResult Health() => Ok(new { status = "ok", timestamp = DateTime.UtcNow });
     [AllowAnonymous, HttpGet("metadata")] public IActionResult Metadata() => Ok(new { roles = Enum.GetNames<UserRole>(), userStatuses = Enum.GetNames<UserStatus>(), copyStatuses = Enum.GetNames<CopyStatus>(), loanStatuses = Enum.GetNames<LoanStatus>(), reservationStatuses = Enum.GetNames<ReservationStatus>(), fineStatuses = Enum.GetNames<FineStatus>() });
+    [AllowAnonymous, HttpGet("configuration/book-batch-limit")]
+    public async Task<ActionResult<BookBatchLimitResponse>> GetBookBatchLimit(CancellationToken ct) => Ok(await sender.Send(new GetBookBatchLimitQuery(), ct));
+    [Authorize(Roles = "Administrator"), HttpPut("configuration/book-batch-limit")]
+    public async Task<ActionResult<BookBatchLimitResponse>> SetBookBatchLimit(UpdateBookBatchLimitRequest request, CancellationToken ct) => Ok(await sender.Send(new SetBookBatchLimitCommand(request), ct));
     [Authorize(Roles = "Administrator,Librarian"), HttpGet("dashboard/summary")] public async Task<IActionResult> Summary(CancellationToken ct) => Ok(await sender.Send(new DashboardSummaryQuery(), ct));
     [Authorize(Roles = "Administrator,Librarian"), HttpGet("dashboard/recent-activity")] public async Task<IActionResult> Activity(CancellationToken ct) => Ok(await sender.Send(new RecentActivityQuery(), ct));
     [Authorize(Roles = "Administrator,Librarian"), HttpGet("dashboard/alerts")] public async Task<IActionResult> Alerts(CancellationToken ct) => Ok(await sender.Send(new DashboardAlertsQuery(), ct));

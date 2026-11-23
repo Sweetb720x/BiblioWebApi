@@ -19,10 +19,10 @@ public sealed class BooksController(ISender sender) : ControllerBase
     [AllowAnonymous, HttpGet("{id:int}/availability")]
     public async Task<IActionResult> Availability(int id, CancellationToken ct) => Ok(await sender.Send(new GetBookAvailabilityQuery(id), ct));
     [Authorize(Roles = "Administrator,Librarian"), HttpPost]
-    public async Task<ActionResult<BookResponse>> Create(CreateBookRequest request, CancellationToken ct)
+    public async Task<ActionResult<CreateBooksBatchResponse>> Create(CreateBookRequest request, CancellationToken ct)
     {
-        var book = await sender.Send(new CreateBookCommand(request), ct);
-        return CreatedAtAction(nameof(Get), new { id = book.Id }, book);
+        var result = await sender.Send(new CreateBooksCommand(request), ct);
+        return StatusCode(StatusCodes.Status201Created, result);
     }
     [Authorize(Roles = "Administrator,Librarian"), HttpPut("{id:int}"), HttpPatch("{id:int}")]
     public async Task<IActionResult> Update(int id, UpdateBookRequest request, CancellationToken ct) { await sender.Send(new UpdateBookCommand(id, request), ct); return NoContent(); }

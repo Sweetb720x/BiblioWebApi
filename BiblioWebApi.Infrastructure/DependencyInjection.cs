@@ -16,6 +16,8 @@ public static class DependencyInjection
         services.AddDbContext<BiblioDbContext>(options => options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        services.AddScoped<IBookBatchCreator, SqlBookBatchCreator>();
+        services.AddScoped<IBookBatchLimitStore, SqlBookBatchLimitStore>();
         services.AddScoped<ILibraryRules, LibraryRules>();
         services.AddHostedService<ReservationExpirationService>();
         return services;
