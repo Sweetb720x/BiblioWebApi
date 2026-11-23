@@ -4,7 +4,7 @@ API REST de gestión bibliotecaria desarrollada con ASP.NET Core .NET 10, JWT Be
 
 ## Ejecutar la API
 
-Revisa la cadena de conexión en `BiblioWebApi/appsettings.Development.json` y confirma que exista la base `BiblioWeb` en SQL Server. Ejecuta el proyecto desde Visual Studio o con:
+**Advertencia:** el script `BiblioWebApi/database/BiblioWebApi.sql` elimina y crea de nuevo la base `BiblioWeb`. Ejecutarlo borra todos los datos existentes. Usa el script solo cuando quieras reiniciar la base; respalda los datos si necesitas conservarlos. Después revisa la cadena de conexión en `BiblioWebApi/appsettings.Development.json` y ejecuta el proyecto desde Visual Studio o con:
 
 ```bash
 dotnet run --project BiblioWebApi/BiblioWebApi.csproj
@@ -65,6 +65,7 @@ Authorization: Bearer {token}
 - `[AllowAnonymous]`: endpoint público; no necesita token.
 - `[Authorize]`: requiere un JWT válido.
 - `[Authorize(Roles = "Administrator,Librarian")]`: requiere un JWT válido y uno de esos roles.
+- `[Authorize(Roles = "Administrator")]`: requiere un JWT válido con rol `Administrator`.
 
 Sin token o con token inválido: `401 Unauthorized`. Con token válido pero sin permisos: `403 Forbidden`.
 
@@ -75,26 +76,43 @@ GET  /api/health
 GET  /api/metadata
 POST /api/auth/register
 POST /api/auth/login
+POST /api/auth/forgot-password
+POST /api/auth/reset-password
+GET  /api/configuration/book-batch-limit
 GET  /api/books
+GET  /api/books/search?q=texto
 GET  /api/books/{id}
 GET  /api/books/{id}/availability
-GET  /api/books/search?q=texto
 GET  /api/categories
+GET  /WeatherForecast
 ```
 
-Endpoints autenticados principales:
+Endpoints autenticados para cualquier usuario con JWT:
 
 ```text
 GET   /api/auth/me
+POST  /api/auth/logout
 POST  /api/auth/refresh
 GET   /api/loans
+GET   /api/loans/overdue
+GET   /api/loans/{id}
 POST  /api/loans
+PATCH /api/loans/{id}/return
+PATCH /api/loans/{id}/renew
+PATCH /api/loans/{id}/cancel
 POST  /api/reservations
+GET   /api/reservations/{id}
+PATCH /api/reservations/{id}/cancel
+GET   /api/users/{userId}/loans
+GET   /api/users/{userId}/reservations
+GET   /api/users/{userId}/fines
+GET   /api/users/{userId}/account-status
 GET   /api/books/{bookId}/copies
 GET   /api/copies/{id}
+GET   /api/fines/{id}
 ```
 
-Endpoints administrativos para `Administrator` o `Librarian`:
+Endpoints para `Administrator` o `Librarian`:
 
 ```text
 POST   /api/books
@@ -117,6 +135,18 @@ DELETE /api/users/{id}
 GET    /api/fines
 POST   /api/fines
 GET    /api/dashboard/summary
+GET    /api/dashboard/recent-activity
+GET    /api/dashboard/alerts
+GET    /api/dashboard/loans-by-status
+GET    /api/dashboard/books-availability
+GET    /api/dashboard/overdue
+```
+
+La consulta del límite es pública. Solo `Administrator` puede modificarlo; `Librarian` no tiene permiso para esta operación:
+
+```text
+GET /api/configuration/book-batch-limit
+PUT /api/configuration/book-batch-limit
 ```
 
 ## Ejemplo completo desde el frontend
@@ -295,23 +325,69 @@ Respuesta `200 OK`, una colección de libros:
 
 También están disponibles `GET /api/books/{id}`, `GET /api/books/{id}/availability` y `GET /api/books/search?q=texto`. Todos responden `200 OK`; si el recurso no existe, la API responde `404 Not Found`.
 
-#### `POST /api/books`
+#### `POST /api/books` — crear uno o varios registros del mismo libro
 
-Requiere rol `Administrator` o `Librarian`.
+Requiere rol `Administrator` o `Librarian`. Envía un solo objeto con los datos del libro. `cantidad` es opcional, por defecto vale `1`. El límite inicial es `500` inclusive; el administrador puede cambiarlo. La API crea esa cantidad de registros idénticos, cada uno con su propio ID.
 
 ```json
 {
-  "isbn": "9780000000000",
-  "titulo": "Clean Architecture",
-  "autor": "Robert C. Martin",
-  "idCategoria": 1,
-  "editorial": "Prentice Hall",
-  "anioPublicacion": 2017,
-  "descripcion": "Arquitectura de software"
+	"isbn": "9780000000000",
+	"titulo": "Clean Architecture",
+	"autor": "Robert C. Martin",
+	"idCategoria": 1,
+	"editorial": "Prentice Hall",
+	"anioPublicacion": 2017,
+	"descripcion": "Arquitectura de software",
+	"cantidad": 50
 }
 ```
 
-Responde `201 Created` con el libro creado. `PUT` o `PATCH /api/books/{id}` actualiza el libro y responde `204 No Content`. `DELETE /api/books/{id}` lo elimina y responde `204 No Content`.
+La respuesta es `201 Created` con la cantidad y los IDs creados. Si `cantidad` vale 50, la respuesta tendrá `cantidadCreada: 50` y 50 elementos en `libros`. Este ejemplo muestra la forma de un elemento:
+
+```json
+{
+	"cantidadCreada": 1,
+  "libros": [
+	{
+	  "id": 12,
+	  "isbn": "9780000000000",
+	  "titulo": "Clean Architecture",
+	  "autor": "Robert C. Martin",
+	  "editorial": "Prentice Hall",
+	  "anioPublicacion": 2017,
+	  "descripcion": "Arquitectura de software",
+	  "idCategoria": 1,
+	  "categoria": "Tecnología",
+	  "totalEjemplares": 0,
+	  "ejemplaresDisponibles": 0
+	}
+  ]
+}
+```
+
+El JSON anterior muestra solo un elemento para ilustrar la forma de cada libro; la respuesta real incluye todos los elementos creados.
+
+Para consultar el límite actual, usa `GET /api/configuration/book-batch-limit`; no requiere token y responde `200 OK`:
+
+```json
+{ "limiteMaximo": 500 }
+```
+
+El número `500` es el valor inicial del script de base de datos. Si el administrador lo modifica, la respuesta devuelve el nuevo valor.
+
+Para cambiarlo, envía `PUT /api/configuration/book-batch-limit` con el JWT de un usuario `Administrator` y el encabezado `Content-Type: application/json`:
+
+```json
+{ "limiteMaximo": 1000 }
+```
+
+Responde `200 OK`:
+
+```json
+{ "limiteMaximo": 1000 }
+```
+
+El límite debe ser un entero positivo que quepa en un entero de 32 bits. Por ejemplo, se puede cambiar a `50` o `1000`. El valor se guarda en SQL Server; `POST /api/books` lo consulta y el stored procedure vuelve a aplicarlo al insertar. Si la cantidad solicitada supera el límite actual, la solicitud se rechaza sin insertar libros. Una petición sin JWT o con un rol diferente de `Administrator` recibe `401 Unauthorized` o `403 Forbidden`, respectivamente. `PUT` o `PATCH /api/books/{id}` actualiza el libro y responde `204 No Content`. `DELETE /api/books/{id}` lo elimina y responde `204 No Content`.
 
 #### Categorías
 
@@ -460,7 +536,7 @@ Respuestas habituales:
 - `401 Unauthorized`: falta el JWT, está vencido o es inválido.
 - `403 Forbidden`: el rol del usuario no tiene permisos.
 - `404 Not Found`: no existe el recurso solicitado.
-- `409 Conflict`: conflicto, por ejemplo correo, ISBN o código de inventario duplicado.
+- `409 Conflict`: conflicto, por ejemplo correo o código de inventario duplicado. El ISBN de los libros puede repetirse.
 - `500 Internal Server Error`: error inesperado del servidor.
 
 Los errores de validación y excepciones se devuelven como `ProblemDetails`. El frontend debe revisar siempre `response.ok` antes de utilizar la respuesta como datos correctos.

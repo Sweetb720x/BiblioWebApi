@@ -1,15 +1,16 @@
-IF DB_ID(N'BiblioWeb') IS NULL CREATE DATABASE BiblioWeb;
-GO
-USE BiblioWeb;
+USE master;
 GO
 
-IF OBJECT_ID(N'dbo.Multas', N'U') IS NOT NULL DROP TABLE dbo.Multas;
-IF OBJECT_ID(N'dbo.Reservas', N'U') IS NOT NULL DROP TABLE dbo.Reservas;
-IF OBJECT_ID(N'dbo.Prestamos', N'U') IS NOT NULL DROP TABLE dbo.Prestamos;
-IF OBJECT_ID(N'dbo.Ejemplares', N'U') IS NOT NULL DROP TABLE dbo.Ejemplares;
-IF OBJECT_ID(N'dbo.Libros', N'U') IS NOT NULL DROP TABLE dbo.Libros;
-IF OBJECT_ID(N'dbo.Categorias', N'U') IS NOT NULL DROP TABLE dbo.Categorias;
-IF OBJECT_ID(N'dbo.Usuarios', N'U') IS NOT NULL DROP TABLE dbo.Usuarios;
+IF DB_ID(N'BiblioWeb') IS NOT NULL
+BEGIN
+	ALTER DATABASE BiblioWeb SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+	DROP DATABASE BiblioWeb;
+END;
+GO
+
+CREATE DATABASE BiblioWeb;
+GO
+USE BiblioWeb;
 GO
 
 CREATE TABLE dbo.Usuarios (
@@ -25,9 +26,13 @@ CREATE TABLE dbo.Categorias (
 	id_categoria int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Categorias PRIMARY KEY,
 	nombre nvarchar(150) NOT NULL CONSTRAINT UQ_Categorias_Nombre UNIQUE
 );
+CREATE TABLE dbo.Configuracion (
+	clave nvarchar(100) NOT NULL CONSTRAINT PK_Configuracion PRIMARY KEY,
+	limite_maximo int NOT NULL CONSTRAINT CK_Configuracion_Limite CHECK (limite_maximo > 0)
+);
 CREATE TABLE dbo.Libros (
 	id_libro int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Libros PRIMARY KEY,
-	isbn nvarchar(20) NOT NULL CONSTRAINT UQ_Libros_Isbn UNIQUE,
+	isbn nvarchar(20) NOT NULL,
 	titulo nvarchar(250) NOT NULL,
 	autor nvarchar(200) NOT NULL,
 	editorial nvarchar(200) NULL,
@@ -76,15 +81,76 @@ CREATE TABLE dbo.Multas (
 GO
 CREATE INDEX IX_Libros_Titulo ON dbo.Libros(titulo);
 CREATE INDEX IX_Libros_Autor ON dbo.Libros(autor);
+CREATE INDEX IX_Libros_Isbn ON dbo.Libros(isbn);
 CREATE INDEX IX_Ejemplares_Libro_Estado ON dbo.Ejemplares(id_libro, estado);
 CREATE INDEX IX_Prestamos_Usuario_Estado ON dbo.Prestamos(id_usuario, estado);
 CREATE INDEX IX_Reservas_Usuario_Estado ON dbo.Reservas(id_usuario, estado);
 CREATE INDEX IX_Multas_Usuario_Estado ON dbo.Multas(id_usuario, estado);
 GO
 INSERT INTO dbo.Categorias(nombre) VALUES (N'Literatura'), (N'Ciencia'), (N'Tecnología'), (N'Historia'), (N'Administración');
+INSERT INTO dbo.Configuracion(clave, limite_maximo) VALUES (N'LimiteLoteLibros', 500);
 SET IDENTITY_INSERT dbo.Usuarios ON;
 INSERT INTO dbo.Usuarios (id_usuario, nombre_completo, correo, hash_contrasena, rol, estado, fecha_creacion)
 VALUES (1, N'Admin', N'admin@bibliowebapi.local', N'pbkdf2$120000$sha256$QmlibGlvQWRtaW5TYWx0MDE=$O/zQ2Ro03Rd4WvQo/wCHQbDimPWRs1AFDnrL1Bw9W+k=', N'Administrador', N'Activo', '2026-01-01T00:00:00');
 SET IDENTITY_INSERT dbo.Usuarios OFF;
+GO
+
+CREATE OR ALTER PROCEDURE dbo.CrearLibrosLote
+	@Isbn nvarchar(20),
+	@Titulo nvarchar(250),
+	@Autor nvarchar(200),
+	@IdCategoria int,
+	@Editorial nvarchar(200) = NULL,
+	@AnioPublicacion int = NULL,
+	@Descripcion nvarchar(max) = NULL,
+	@Cantidad int = 1
+AS
+BEGIN
+	SET NOCOUNT ON;
+	SET XACT_ABORT ON;
+	DECLARE @LimiteMaximo int = (SELECT limite_maximo FROM dbo.Configuracion WHERE clave = N'LimiteLoteLibros');
+
+	IF @LimiteMaximo IS NULL OR @LimiteMaximo < 1
+		THROW 50001, 'El límite máximo configurado debe ser mayor que cero.', 1;
+
+	IF @Cantidad < 1 OR @Cantidad > @LimiteMaximo
+		THROW 50002, 'La cantidad solicitada está fuera del límite permitido.', 1;
+
+	IF NOT EXISTS (SELECT 1 FROM dbo.Categorias WHERE id_categoria = @IdCategoria)
+		THROW 50003, 'La categoría no existe.', 1;
+
+	DECLARE @Insertados TABLE (id_libro int NOT NULL);
+	DECLARE @Numeros TABLE (numero int NOT NULL PRIMARY KEY);
+	;WITH Numeros AS
+	(
+		SELECT 1 AS numero
+		UNION ALL
+		SELECT numero + 1 FROM Numeros WHERE numero < @Cantidad
+	)
+	INSERT INTO @Numeros(numero)
+	SELECT numero FROM Numeros OPTION (MAXRECURSION 0);
+
+	BEGIN TRY
+		BEGIN TRANSACTION;
+
+		INSERT INTO dbo.Libros (isbn, titulo, autor, editorial, anio_publicacion, descripcion, esta_activo, id_categoria)
+		OUTPUT INSERTED.id_libro INTO @Insertados(id_libro)
+		SELECT @Isbn, @Titulo, @Autor, @Editorial, @AnioPublicacion, @Descripcion, 1, @IdCategoria
+		FROM @Numeros;
+
+		COMMIT TRANSACTION;
+	END TRY
+	BEGIN CATCH
+		IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+		THROW;
+	END CATCH;
+
+	SELECT l.id_libro AS id, l.isbn, l.titulo, l.autor, l.editorial,
+		l.anio_publicacion, l.descripcion, l.id_categoria, c.nombre AS categoria
+	FROM @Insertados i
+	INNER JOIN dbo.Libros l ON l.id_libro = i.id_libro
+	INNER JOIN dbo.Categorias c ON c.id_categoria = l.id_categoria
+	ORDER BY l.id_libro;
+END;
 GO
 -- Cambie DefaultConnection en appsettings.json si no utiliza LocalDB.
